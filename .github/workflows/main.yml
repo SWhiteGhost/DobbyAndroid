@@ -1,0 +1,42 @@
+name: Build Dobby Android
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Parchear asm arm64
+        run: |
+          f=source/TrampolineBridge/ClosureTrampolineBridge/arm64/closure_bridge_arm64.asm
+          grep -n "PAGE" $f || true
+          sed -i -E 's/([A-Za-z_0-9]+)@PAGEOFF/:lo12:\1/g; s/([A-Za-z_0-9]+)@PAGE/\1/g' $f
+          grep -n "lo12\|adrp" $f || true
+
+      - name: Build arm64
+        run: |
+          mkdir build && cd build
+          cmake .. \
+            -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK_LATEST_HOME/build/cmake/android.toolchain.cmake \
+            -DANDROID_ABI=arm64-v8a \
+            -DANDROID_PLATFORM=android-21 \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DDOBBY_GENERATE_SHARED=OFF
+          make -j4
+
+      - name: Reunir archivos
+        run: |
+          mkdir out
+          find build -name "libdobby*" -exec cp {} out/ \;
+          cp include/dobby.h out/ || true
+          file out/*
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dobby-arm64
+          path: out/
